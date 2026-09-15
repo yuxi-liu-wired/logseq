@@ -555,39 +555,34 @@
          :else "normal-block")))))
 
 (defn editor-row-height-unchanged?
-  "Check if the row height of editor textarea is changed, which happens when font-size changed"
+  "True while the last key was one that keeps the textarea's row height, so
+   the autosize fallback reuses its measurements; Enter can change the height."
   []
-  ;; FIXME: assuming enter key is the only trigger of the height changing (under markdown editing of headlines)
-  ;; FIXME: looking for an elegant & robust way to track the change of font-size, or wait for our own WYSIWYG text area
   (let [last-key (state/get-last-key-code)]
     (and (not= keycode/enter (:key-code last-key))
          (not= keycode/enter-code (:code last-key)))))
 
-(hsx/defc mock-textarea
-  [content]
-  (hooks/use-effect!
-   (fn []
-     (when-not (state/get-state :editor/on-paste?)
-       (try (editor-handler/handle-last-input)
-            (catch :default _e
-              nil)))
-     (state/set-state! :editor/on-paste? false)))
-  [:div#mock-text
+(defn- update-heading-class!
+  "Sets the textarea's class (uniline/multiline, heading level) from its
+   current content. Called from the box's layout effect and from the change
+   handler, so the class has one writer and the box stays unrendered on keys."
+  [^js el block format value]
+  (let [class' (get-editor-style-class block value format)]
+    (when (not= class' (.-className el))
+      (set! (.-className el) class'))))
+
+(defn- mock-textarea
+  "The hidden mirror of the textarea that the caret-position helpers read.
+   Its spans are built on demand by frontend.util.cursor/build-mock-text!,
+   only when a caret position is needed."
+  []
+  [:div.mock-text
    {:style {:width "100%"
             :height "100%"
             :position "absolute"
             :visibility "hidden"
             :top 0
-            :left 0}}
-   (let [content (str content "0")
-         graphemes (util/split-graphemes content)
-         graphemes-char-index (reductions #(+ %1 (count %2)) 0 graphemes)]
-     (for [[idx c] (into (sorted-map) (zipmap graphemes-char-index graphemes))]
-       (if (= c "\n")
-         [:span {:id (str "mock-text_" idx)
-                 :key idx} "0" [:br]]
-         [:span {:id (str "mock-text_" idx)
-                 :key idx} c])))])
+            :left 0}}])
 
 (defn- open-editor-popup!
   [id content opts]
@@ -712,11 +707,26 @@
         component-state {:opts opts
                          :id id
                          :config config}
-        content (rfx/use-sub [:editor/content (:block/uuid block)])
-        heading-class (get-editor-style-class block content format)
+        ;; Read once at mount: every keystroke writes :editor/content, the
+        ;; editor popups subscribe to it, and this box keeps its mounted value.
+        content (get (state/get-state :editor/content) (:block/uuid block))
+        on-change (editor-handler/editor-on-change! block id search-timeout)
         read-only? (editor-readonly? block)
         _ (lifecycle/use-did-mount! id config)
         _ (use-key-listeners! component-state id format)
+        ;; The textarea's class has one writer: this layout effect at mount
+        ;; and on block change, and the change handler on each keystroke.
+        _ (hooks/use-layout-effect!
+           (fn []
+             (when-let [el (gdom/getElement id)]
+               (update-heading-class! el block format (.-value el))))
+           [id (:block/uuid block) format])
+        ;; A paste that mounts a fresh editor (block paste, embed paste, file
+        ;; paste) fires no change event, so the flag is cleared here as well.
+        _ (hooks/use-effect!
+           (fn []
+             (state/set-state! :editor/on-paste? false))
+           [id])
         _ (hooks/use-layout-effect!
            (fn []
              (state/set-editor-args! [opts id config]))
@@ -742,11 +752,13 @@
         opts (cond->
               {:id                id
                :ref               #(reset! *ref %)
-               :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
                :default-value     (or content "")
                :minRows           (if (state/enable-grammarly?) 2 1)
                :on-click          (editor-handler/editor-on-click! id)
-               :on-change         (editor-handler/editor-on-change! block id search-timeout)
+               :on-change         (fn [e]
+                                    (when-let [el (.-target e)]
+                                      (update-heading-class! el block format (util/evalue e)))
+                                    (on-change e))
                :on-paste          (paste-handler/editor-on-paste! id)
                :on-key-down       (fn [e]
                                     (if-let [on-key-down (:on-key-down config)]
@@ -758,7 +770,7 @@
                :auto-focus true
                :auto-capitalize (if (util/mobile?) "sentences" "off")
                :auto-correct (if (util/mobile?) "true" "false")
-               :class heading-class}
+               :cacheMeasurements (editor-row-height-unchanged?)}
                read-only?
                (merge
                 {:on-before-input #(.preventDefault ^js/Event %)
@@ -771,7 +783,7 @@
     [:div.editor-inner.flex.flex-1 {:class (if block "block-editor" "non-block-editor")}
 
      (ui/ls-textarea opts)
-     (mock-textarea content)
+     (mock-textarea)
      (command-popups id format)
 
      (when format
