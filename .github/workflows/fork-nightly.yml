@@ -200,8 +200,10 @@ jobs:
           echo "${{ steps.ref.outputs.version }}" > ./VERSION
 
       - name: Package the Linux app
+        # static/ is inside the pnpm workspace; without --ignore-workspace the
+        # install lands at the workspace root and electron-builder is absent here.
         working-directory: ./static
-        run: pnpm install --frozen-lockfile && pnpm electron:make
+        run: pnpm install --frozen-lockfile --ignore-workspace && pnpm electron:make
 
       - name: Collect artifacts
         run: |
