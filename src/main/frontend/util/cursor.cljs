@@ -21,6 +21,39 @@
              second
              int)})
 
+(defn- mock-text-el
+  "The .mock-text mirror that belongs to `input`: the one inside the same
+   .editor-inner, so two mounted editors each keep their own. Without an input
+   (callers that hold only a caret rect) the first mirror in the document."
+  [input]
+  (or (some-> input (.closest ".editor-inner") (.querySelector ".mock-text"))
+      (.querySelector js/document ".mock-text")))
+
+(defn build-mock-text!
+  "Fills the input's .mock-text mirror (the hidden copy of the editing
+   textarea) with one span per grapheme of the input's value plus a trailing
+   \"0\", ids mock-text_<char index>, a newline rendered as \"0\" followed by
+   <br>. The caret helpers below read this DOM. Built on demand, and only when
+   the value changed since the last build, so a keystroke runs none of this."
+  [input]
+  (when-let [el (mock-text-el input)]
+    (let [value (str (.-value input) "0")]
+      (when-not (= value (gobj/get el "__mockValue"))
+        (let [frag (js/document.createDocumentFragment)]
+          (loop [idx 0
+                 graphemes (seq (util/split-graphemes value))]
+            (when-let [c (first graphemes)]
+              (let [span (js/document.createElement "span")]
+                (set! (.-id span) (str "mock-text_" idx))
+                (set! (.-textContent span) (if (= c "\n") "0" c))
+                (when (= c "\n")
+                  (.appendChild span (js/document.createElement "br")))
+                (.appendChild frag span))
+              (recur (+ idx (count c)) (rest graphemes))))
+          (set! (.-textContent el) "")
+          (.appendChild el frag)
+          (gobj/set el "__mockValue" value))))))
+
 (defn get-caret-pos
   "Get caret offset position as well as input element rect.
 
@@ -33,11 +66,11 @@
    (when input
      (let [rect (bean/->clj (.. input (getBoundingClientRect) (toJSON)))
            grapheme-pos (util/get-graphemes-pos (.-value input) pos)]
+       (build-mock-text! input)
        (try
-         (some-> (gdom/getElement "mock-text")
-                 gdom/getChildren
-                 array-seq
-                 (util/nth-safe grapheme-pos)
+         (some-> (mock-text-el input)
+                 (.-children)
+                 (.item grapheme-pos)
                  mock-char-pos
                  (assoc :rect rect))
          (catch :default e
@@ -166,31 +199,27 @@
                    inc))]
     (move-cursor-to input idx)))
 
-(defn textarea-cursor-rect-first-row? [cursor]
-  (let [elms   (some-> (gdom/getElement "mock-text")
-                       gdom/getChildren
-                       array-seq)
-        tops   (->> elms
-                    (map mock-char-pos)
-                    (map :top)
-                    (distinct))]
-    (= (first tops) (:top cursor))))
+(defn textarea-cursor-rect-first-row?
+  ;; The mirror's spans are in document order, so the first span is on the
+  ;; first row: one offsetTop read instead of one per character.
+  ([cursor] (textarea-cursor-rect-first-row? cursor nil))
+  ([cursor input]
+   (let [first-elm (some-> (mock-text-el input) .-firstElementChild)]
+     (and first-elm
+          (= (.-offsetTop first-elm) (:top cursor))))))
 
 (defn textarea-cursor-first-row? [input]
-  (textarea-cursor-rect-first-row? (get-caret-pos input)))
+  (textarea-cursor-rect-first-row? (get-caret-pos input) input))
 
-(defn textarea-cursor-rect-last-row? [cursor]
-  (let [elms   (some-> (gdom/getElement "mock-text")
-                       gdom/getChildren
-                       array-seq)
-        tops   (->> elms
-                    (map mock-char-pos)
-                    (map :top)
-                    (distinct))]
-    (= (last tops) (:top cursor))))
+(defn textarea-cursor-rect-last-row?
+  ([cursor] (textarea-cursor-rect-last-row? cursor nil))
+  ([cursor input]
+   (let [last-elm (some-> (mock-text-el input) .-lastElementChild)]
+     (and last-elm
+          (= (.-offsetTop last-elm) (:top cursor))))))
 
 (defn textarea-cursor-last-row? [input]
-  (textarea-cursor-rect-last-row? (get-caret-pos input)))
+  (textarea-cursor-rect-last-row? (get-caret-pos input) input))
 
 (defn- next-cursor-pos-up-down [direction cursor]
   (when-let [mock-text (gdom/getElement "mock-text")]

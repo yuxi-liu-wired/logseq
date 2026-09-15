@@ -2227,6 +2227,8 @@
   [block]
   (= (:block/uuid block) (:block/uuid (state/get-edit-block))))
 
+(declare handle-last-input)
+
 (defn edit-box-on-change!
   [e block id]
   (when (current-edit-block? block)
@@ -2243,7 +2245,13 @@
                             (not (re-find #"#\S+" value)))
                    ; don't auto-save for page's properties block
                    (save-current-block! {:skip-properties? true})))
-               450)))))
+               450))
+      ;; Command / page-search triggers for the character just typed. This ran
+      ;; in an effect of the editor box, which re-rendered on every keystroke.
+      (if (state/get-state :editor/on-paste?)
+        (state/set-state! :editor/on-paste? false)
+        (try (handle-last-input)
+             (catch :default _e nil))))))
 
 (defn- start-of-new-word?
   [input pos]
