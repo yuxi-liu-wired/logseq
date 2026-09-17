@@ -236,7 +236,12 @@ jobs:
 
       - name: Replace the fork-nightly release
         run: |
-          gh release delete fork-nightly --yes --cleanup-tag || true
+          # -R is explicit because this checkout also has logseq/logseq as a
+          # remote, and gh picks that one otherwise. --target names the commit
+          # the tag points at, since the built tree stays in the runner.
+          gh release delete fork-nightly -R ${{ github.repository }} --yes --cleanup-tag || true
           gh release create fork-nightly builds/* \
+            -R ${{ github.repository }} \
+            --target fork/main \
             --title "Fork nightly ${{ steps.ref.outputs.version }}" \
             --notes "fork/main rebased onto upstream ${{ needs.rebase.outputs.upstream }}, built as ${{ steps.rebased.outputs.sha }}. Changes listed in FORK.md."
