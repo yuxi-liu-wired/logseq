@@ -1,10 +1,15 @@
-# Keeps fork/main on top of upstream master and publishes a Linux build of it
-# as the release tagged `fork-nightly` on this fork.
+# Builds fork/main on top of the current upstream master and publishes it as
+# the release tagged `fork-nightly` on this fork.
 #
-# Every day: rebase fork/main onto logseq/logseq master (stop and open an
-# issue on a conflict), lint and run the unit suite, build the desktop app the
-# way upstream's release workflow does, and replace the `fork-nightly`
+# Every day: rebase fork/main onto logseq/logseq master in the runner's own
+# checkout (stop on a conflict), lint and run the unit suite, build the desktop
+# app the way upstream's release workflow does, and replace the `fork-nightly`
 # release with the new AppImage and zip.
+#
+# The rebase result stays inside each job. GITHUB_TOKEN refuses a push that
+# changes any file under .github/workflows, which a rebase does whenever
+# upstream edits one of its own workflows, so the branch is advanced by hand
+# and the runner only builds.
 name: Fork nightly
 
 on:
@@ -28,7 +33,7 @@ jobs:
   rebase:
     runs-on: ubuntu-22.04
     outputs:
-      sha: ${{ steps.push.outputs.sha }}
+      upstream: ${{ steps.rebase.outputs.upstream }}
     steps:
       - name: Check out fork/main
         uses: actions/checkout@v4
@@ -43,7 +48,7 @@ jobs:
           git config user.email "yuxi@yuxi.ml"
           git remote add upstream https://github.com/logseq/logseq.git
           git fetch upstream master
-          echo "upstream=$(git rev-parse --short upstream/master)" >> "$GITHUB_OUTPUT"
+          echo "upstream=$(git rev-parse upstream/master)" >> "$GITHUB_OUTPUT"
           if git rebase upstream/master; then
             echo "rebased fork/main onto $(git rev-parse --short upstream/master)"
           else
@@ -60,20 +65,23 @@ jobs:
           gh issue create --title "fork/main: rebase onto upstream ${{ steps.rebase.outputs.upstream }} has conflicts" \
             --body "The scheduled rebase of fork/main onto logseq/logseq master ${{ steps.rebase.outputs.upstream }} stopped on a conflict. Resolve it by hand: fetch upstream, rebase fork/main, keep the mechanism described in FORK.md, push with --force-with-lease. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-      - name: Push the rebased branch
-        id: push
-        run: |
-          git push --force-with-lease origin fork/main
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
   test:
     needs: rebase
     runs-on: ubuntu-22.04
     steps:
-      - name: Check out the rebased commit
+      - name: Check out fork/main
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.rebase.outputs.sha }}
+          ref: fork/main
+          fetch-depth: 0
+
+      - name: Rebase onto the same upstream commit
+        run: |
+          git config user.name "Yuxi Liu"
+          git config user.email "yuxi@yuxi.ml"
+          git remote add upstream https://github.com/logseq/logseq.git
+          git fetch upstream master
+          git rebase ${{ needs.rebase.outputs.upstream }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -128,10 +136,21 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Check out the rebased commit
+      - name: Check out fork/main
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.rebase.outputs.sha }}
+          ref: fork/main
+          fetch-depth: 0
+
+      - name: Rebase onto the same upstream commit
+        id: rebased
+        run: |
+          git config user.name "Yuxi Liu"
+          git config user.email "yuxi@yuxi.ml"
+          git remote add upstream https://github.com/logseq/logseq.git
+          git fetch upstream master
+          git rebase ${{ needs.rebase.outputs.upstream }}
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -218,5 +237,4 @@ jobs:
           gh release delete fork-nightly --yes --cleanup-tag || true
           gh release create fork-nightly builds/* \
             --title "Fork nightly ${{ steps.ref.outputs.version }}" \
-            --notes "fork/main at ${{ needs.rebase.outputs.sha }}, rebased onto upstream master. Changes listed in FORK.md." \
-            --prerelease --latest=false
+            --notes "fork/main rebased onto upstream ${{ needs.rebase.outputs.upstream }}, built as ${{ steps.rebased.outputs.sha }}. Changes listed in FORK.md."
