@@ -1,6 +1,6 @@
 This fork is the Logseq DB version its owner uses: upstream `master` plus every fix of ours that upstream has not merged yet. It began with making typing fast on a large graph. The branch `fork/main` carries every change on top of upstream `master`, and this file records what the changes are, how to rebase them onto a newer upstream, how to build a runnable desktop app from them, and how to measure that they still work.
 
-Upstream base: `logseq/logseq` master, rebased onto its head by the "Fork nightly" workflow on every push to `fork/main` and once a day; `d05c6254` on 2026-09-24. Store dependency: this fork's copy of `logseq/rfx` at `https://github.com/yuxi-liu-wired/rfx`, branch `perf/incremental-subscription-updates`, commit `3dbe738`, pinned in `deps.edn`.
+Upstream base: `logseq/logseq` master, rebased onto its head by the "Fork nightly" workflow on every push to `fork/main` and once a day; `e2ca31b9` on 2026-09-30. Store dependency: this fork's copy of `logseq/rfx` at `https://github.com/yuxi-liu-wired/rfx`, branch `perf/incremental-subscription-updates`, commit `3dbe738`, pinned in `deps.edn`.
 
 The problem being fixed: on a graph of about 2,000 pages and 150,000 blocks, each keystroke took 72 ms from key press to paint (p90 112 ms) and one key in four stalled the main thread for over 50 ms. A CPU profile put 36 percent of the time inside the state store's `next-state!`, which re-evaluated every mounted subscription on every state write, and each keystroke wrote the store five times. The rest was the editor box re-rendering on every key: the autosize textarea re-measuring, a hidden one-span-per-character mirror of the text being rebuilt, and a command-trigger check running as a render effect.
 
@@ -13,8 +13,8 @@ The changes, one branch each:
 Fixes open as upstream pull requests, carried here until upstream merges them (the daily rebase then drops them; `scripts/fork-stack.sh` in the perf workspace rebuilds this list's commits onto a new base):
 
 - Opening a graph: #13468 (a reopen keeps `:max-tx`, so it no longer recomputes the sync checksum), #13469 (the full checksum recompute in 1 walk), #13437 (block trees load before resources), #13447 and #13451 (rows below the fold render after the first paint).
-- Every edit: #13470 (the checksum's 2 keys in 1 transaction), #13476 (no checksum on graphs that do not sync), #13478 (no sync record on graphs that do not sync), #13475 (search rows found by rowid), #13479 (a delete sends no pre-read; the cursor moves when it is sent).
-- Undo: #13466 (on graphs that do not sync, undo replays DataScript's own record of the change; includes #13462, a full stack keeps its newest entries), #13458 (undo of deleting blocks that refer to each other).
+- Every edit: #13470 (the checksum's 2 keys in 1 transaction), #13478 (no sync record on graphs that do not sync), #13475 (search rows found by rowid), #13479 (a delete sends no pre-read; the cursor moves when it is sent).
+- Undo: #13466 (on graphs that do not sync, undo replays DataScript's own record of the change), #13528 (undo of deleting a page whose blocks refer to each other).
 
 Measured result on the same graph, key press to next frame, p50 / p90 / max over 83 keys, in the box on a virtual display: journals page 15.7 / 25.2 / 45 before, 4.3 / 6.2 / 14.1 after; a 204 KB page 44.7 / 50.7 / 66 before, 8.7 / 10.5 / 13.7 after; a 337 KB page 27.9 / 32 / 43 before, 4.5 / 11.1 / 29.9 after. Key handler time per key on the 204 KB page: 11 ms before, 0.7 ms after. Block-to-block arrow moves: 44 ms with 38 stalls in 40 moves before, 21 ms with none after.
 
