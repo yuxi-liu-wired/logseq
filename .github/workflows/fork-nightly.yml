@@ -226,8 +226,26 @@ jobs:
       - name: Package the Linux app
         # static/ is inside the pnpm workspace; without --ignore-workspace the
         # install lands at the workspace root and electron-builder is absent here.
+        # Upstream packs static/ alone on a fresh runner. Here pnpm still sees the
+        # root workspace, so `pnpm list` in static/ returns no dependencies and
+        # electron-builder 26.17 packs the root's node_modules instead. The
+        # workspace file makes static/ its own root, as on upstream's runner.
         working-directory: ./static
-        run: pnpm install --frozen-lockfile --ignore-workspace && pnpm electron:make
+        run: |
+          pnpm install --frozen-lockfile --ignore-workspace
+          printf 'packages: []\n' > pnpm-workspace.yaml
+          pnpm electron:make
+
+      - name: Check that every app dependency is packed
+        # A missing one stops the app at launch ("Cannot find module").
+        working-directory: ./static
+        run: |
+          pnpm dlx @electron/asar list dist/linux-unpacked/resources/app.asar > packed.txt
+          missing=0
+          for dep in $(node -p 'Object.keys(require("./package.json").dependencies).join(" ")'); do
+            grep -qx "/node_modules/$dep/package.json" packed.txt || { echo "::error::$dep is not packed"; missing=1; }
+          done
+          exit "$missing"
 
       - name: Collect artifacts
         run: |
