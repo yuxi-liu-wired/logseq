@@ -16,6 +16,7 @@ Fixes open as upstream pull requests, carried here until upstream merges them (t
 - #13546, opening a page: rows below the fold render after the first paint.
 - #13547, the editor: the keystroke bookkeeping and the changed-path store above, and a delete sends no pre-read (the cursor moves when it is sent).
 - #13538, the maintainers' fix of a query table: a deleted row no longer turns the table into "Query error".
+- #13598, moving a block: Shift+Alt+Down past the window's bottom edge scrolls the page with the block.
 
 Measured result on the same graph, key press to next frame, p50 / p90 / max over 83 keys, in the box on a virtual display: journals page 15.7 / 25.2 / 45 before, 4.3 / 6.2 / 14.1 after; a 204 KB page 44.7 / 50.7 / 66 before, 8.7 / 10.5 / 13.7 after; a 337 KB page 27.9 / 32 / 43 before, 4.5 / 11.1 / 29.9 after. Key handler time per key on the 204 KB page: 11 ms before, 0.7 ms after. Block-to-block arrow moves: 44 ms with 38 stalls in 40 moves before, 21 ms with none after.
 
