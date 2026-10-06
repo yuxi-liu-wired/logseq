@@ -28,7 +28,7 @@ Fixes open as upstream pull requests, carried here until upstream merges them (t
 - #13610, "does not contain" ignores case like "contains"; a missing value sorts last in query and grouped tables (db-test #1322, #1320).
 - #13615, a repeating Deadline or Scheduled steps months and years in the local calendar: east of UTC, March 1 monthly comes back April 1, not March 29 (db-test #1355).
 - #13616, a Deadline or Scheduled cleared with the date picker's trash button no longer makes checking a repeating task fail (db-test #1353).
-- #13617, a `"` or `\` in a page or tag title no longer breaks the queries that name it (db-test #1374).
+- #13617, a `"`, `\` or `[[...]]` in a page or tag title no longer breaks the queries that name it (db-test #1374).
 - #13618, typing a property's name in another case adds that property, even when a tag of the same name exists, instead of creating a second one (db-test #1351).
 - #13619, creating "Foo/Baz" after "Bar/Foo" makes a new top-level Foo instead of going under Bar's Foo; the same for tags (db-test #1348).
 - #13620, a namespace root can no longer be renamed to the name of a top-level page, or the other way around (db-test #1346).
