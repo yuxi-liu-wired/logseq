@@ -30,6 +30,7 @@ Fixes open as upstream pull requests, carried here until upstream merges them (t
 - #13616, a Deadline or Scheduled cleared with the date picker's trash button no longer makes checking a repeating task fail (db-test #1353).
 - #13617, a `"` or `\` in a page or tag title no longer breaks the queries that name it (db-test #1374).
 - #13618, typing a property's name in another case adds that property, even when a tag of the same name exists, instead of creating a second one (db-test #1351).
+- #13619, creating "Foo/Baz" after "Bar/Foo" makes a new top-level Foo instead of going under Bar's Foo; the same for tags (db-test #1348).
 
 Fork only, never upstream: a move log. Every Shift+Alt+Up / Down (Cmd+Shift on macOS) appends 1 line to `~/.logseq/move-log/<day>.log`: the key, what was edited or selected, each step of the move with its time, the rows around the block before and after. A press that leaves the block where it was is marked MISS and shows a warning; a move key that reached the app but ran no move is logged as UNHANDLED (`src/main/frontend/handler/move_log.cljs`, the `:appendMoveLog` handler in `src/electron/electron/handler.cljs`).
 
