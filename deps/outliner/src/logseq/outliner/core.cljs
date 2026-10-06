@@ -1483,53 +1483,63 @@
                 (transact-move-blocks! conn blocks target-block sibling? opts outliner-op top-level-blocks)
                 nil))))))))
 
-(defn- move-blocks-up-down
-  "Move blocks up/down."
-  [conn blocks up?]
-  {:pre [(seq blocks) (boolean? up?)]}
-  (let [db @conn
-        top-level-blocks (filter-top-level-blocks db blocks)
-        ;; the target comes from the selection's first block (up) or last
-        ;; (down): in page order, whatever order the blocks were clicked in
-        ;; (Ctrl+click c, then b: the selection reads c, b)
-        top-level-blocks (cond
-                           (<= (count top-level-blocks) 1)
-                           top-level-blocks
+(defn- page-order-top-level-blocks
+  "The selection's top-level blocks in page order, whatever order they were
+  clicked in (Ctrl+click c, then b: the selection reads c, b): a move up or
+  down takes its target from the first block (up) or the last (down)."
+  [db blocks]
+  (let [top-level-blocks (filter-top-level-blocks db blocks)]
+    (cond
+      (<= (count top-level-blocks) 1)
+      top-level-blocks
 
-                           ;; blocks of 1 page, none a property value: page
-                           ;; order (the sort leaves out blocks it cannot
-                           ;; place, so only blocks it can place go in)
-                           (and (every? #(:block/page %) top-level-blocks)
-                                (apply = (map #(:db/id (:block/page %)) top-level-blocks))
-                                (not-any? #(or (:logseq.property/created-from-property %)
-                                               (:block/closed-value-property %))
-                                          top-level-blocks))
-                           (ldb/sort-page-random-blocks db top-level-blocks)
+      ;; blocks of 1 page, none a property value: page order (the sort
+      ;; leaves out blocks it cannot place, so only blocks it can place go in)
+      (and (every? #(:block/page %) top-level-blocks)
+           (apply = (map #(:db/id (:block/page %)) top-level-blocks))
+           (not-any? #(or (:logseq.property/created-from-property %)
+                          (:block/closed-value-property %))
+                     top-level-blocks))
+      (ldb/sort-page-random-blocks db top-level-blocks)
 
-                           ;; siblings, e.g. nested pages (no :block/page)
-                           ;; or a nested page and a block beside it
-                           (apply = (map #(:db/id (:block/parent %)) top-level-blocks))
-                           (sort-by :block/order top-level-blocks)
+      ;; siblings, e.g. nested pages (no :block/page) or a nested page and
+      ;; a block beside it
+      (apply = (map #(:db/id (:block/parent %)) top-level-blocks))
+      (sort-by :block/order top-level-blocks)
 
-                           :else
-                           top-level-blocks)
-        opts {:outliner-op :move-blocks-up-down}
-        ;; the page a node is drawn on: a block's page, or for a nested page
+      :else
+      top-level-blocks)))
+
+(defn- move-pages
+  "The pages `nodes` are drawn on, and a `same-page?` that says whether a
+  move to `target` (as its sibling or child) stays on one of them."
+  [db nodes]
+  (let [;; the page a node is drawn on: a block's page, or for a nested page
         ;; (no :block/page) the page it is nested in
         node-page-id (fn [node]
                        (let [node (d/entity db (:db/id node))]
                          (or (:db/id (:block/page node))
                              (:db/id (:block/parent node)))))
-        pages (set (map node-page-id top-level-blocks))
+        pages (set (map node-page-id nodes))
         ;; where a node lands as a child or sibling of `target`
         target-page-id (fn [target sibling?]
                          (let [target (d/entity db (:db/id target))]
                            (if (and (not sibling?)
                                     (or (ldb/page? target) (:block/name target)))
                              (:db/id target)
-                             (node-page-id target))))
-        same-page? (fn [target sibling?]
-                     (contains? pages (target-page-id target sibling?)))]
+                             (node-page-id target))))]
+    {:pages pages
+     :same-page? (fn [target sibling?]
+                   (contains? pages (target-page-id target sibling?)))}))
+
+(defn- move-blocks-up-down
+  "Move blocks up/down."
+  [conn blocks up?]
+  {:pre [(seq blocks) (boolean? up?)]}
+  (let [db @conn
+        top-level-blocks (page-order-top-level-blocks db blocks)
+        opts {:outliner-op :move-blocks-up-down}
+        {:keys [pages same-page?]} (move-pages db top-level-blocks)]
     (cond
       ;; a move up or down stays in 1 page: its target comes from 1 end of
       ;; the selection, so a selection over 2 pages would carry the blocks
