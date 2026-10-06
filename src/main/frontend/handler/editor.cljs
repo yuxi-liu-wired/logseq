@@ -964,7 +964,37 @@
       :else
       (delete-block-aux! block edit-block-f))))
 
+(defonce ^:private *pending-block-delete
+  ;; The running delete-block-inner! (Backspace at the start of a block,
+  ;; Delete at its end), until it has moved the editor to the joined block.
+  ;; Until then the edit state names the deleted block.
+  (atom nil))
+
+(defn <pending-block-delete
+  "Settles when the running Backspace or Delete join, if any, has moved the
+  editor."
+  []
+  (or @*pending-block-delete (p/resolved nil)))
+
+(defn- <pending-block-delete-or-nil
+  "The running join's promise, or nil when none runs (fork: for the move log)."
+  []
+  @*pending-block-delete)
+
+(declare delete-block-inner-aux!)
+
 (defn delete-block-inner!
+  [repo editor-state]
+  (let [p (delete-block-inner-aux! repo editor-state)
+        ;; settles when the join is done or failed, never rejects
+        settled (-> (p/resolved p) (p/catch (constantly nil)))]
+    (reset! *pending-block-delete settled)
+    (p/then settled (fn [_]
+                      (when (identical? @*pending-block-delete settled)
+                        (reset! *pending-block-delete nil))))
+    p))
+
+(defn- delete-block-inner-aux!
   [repo {:keys [block block-id value config block-container current-block next-block delete-concat?]}]
   (when (and block-id
              (not (comments-model/protected-comment-block? (or current-block block)))
@@ -1815,8 +1845,13 @@
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
-    (let [rec (move-log/start up? event)
-          edit-block-id (:block/uuid (state/get-edit-block))
+    ;; A Backspace or Delete join still running names the deleted block as
+    ;; the edited one; the move waits for it and moves the joined block
+    (p/let [rec (move-log/start up? event)
+            pending? (some? (<pending-block-delete-or-nil))
+            _ (<pending-block-delete)]
+    (when pending? (move-log/step! rec "waited for a Backspace/Delete join"))
+    (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)]
                          (move-log/step! rec (str "send " (count blocks') " block(s)"))
@@ -1875,7 +1910,7 @@
           (p/catch (fn [e]
                      (move-log/step! rec (str "ERROR " (or (ex-message e) e)))
                      (move-log/finish! rec)
-                     (throw e)))))))
+                     (throw e))))))))
 
 (defn get-selected-ordered-blocks
   []
