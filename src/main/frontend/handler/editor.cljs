@@ -21,6 +21,7 @@
             [frontend.handler.editor.autopair :as editor-autopair]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
+            [frontend.handler.move-log :as move-log]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
@@ -1823,13 +1824,17 @@
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
-    (let [edit-block-id (:block/uuid (state/get-edit-block))
+    (let [rec (move-log/start up? event)
+          edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)]
+                         (move-log/step! rec (str "send " (count blocks') " block(s)"))
                          (p/let [result (ui-outliner-tx/transact!
                                          (merge {:outliner-op :move-blocks}
                                                 (block-handler/outliner-tx-meta (first blocks')))
                                          (outliner-op/move-blocks-up-down! blocks' up?))]
+                           (move-log/step! rec "applied")
+                           (move-log/finish! rec)
                            ;; the moved row is drawn in its new place on the
                            ;; next frame; scroll that place into view
                            (js/requestAnimationFrame
@@ -1837,15 +1842,18 @@
                               (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                                 (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))
                            result)))]
-      (p/let [root-block (get-focused-root-block)]
+      (-> (p/let [root-block (get-focused-root-block)]
         (if edit-block-id
           (p/let [block (db-async/<get-block (state/get-current-repo) edit-block-id {:children? false})]
             (let [blocks [(assoc block :block/title (state/get-edit-content))]
                   blocks (filter #(block-eligible-for-move-up-down? % root-block) blocks)
                   container-id (get-new-container-id (if up? :move-up :move-down) {})]
-              (when (seq blocks)
+              (move-log/step! rec (str "block loaded " (some? block) ", eligible " (count blocks)))
+              (if-not (seq blocks)
+                (move-log/finish! rec)
                 (p/do!
                  (save-current-block!)
+                 (move-log/step! rec "saved")
                  (move-nodes blocks)
                  (if container-id
                    (state/set-editing-block-id! [container-id edit-block-id])
@@ -1853,12 +1861,20 @@
                      (.focus input)
                      (util/scroll-editor-cursor input)))))))
           (let [ids (state/get-selection-block-ids)]
-            (when (seq ids)
+            (if-not (seq ids)
+              (do (move-log/step! rec "nothing edited or selected")
+                  (move-log/finish! rec))
               (p/let [results (db-async/<get-blocks (state/get-current-repo) ids {:children? false})
                       loaded-blocks (unwrap-block-results results)
                       blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
-                (when (seq blocks)
-                  (move-nodes blocks))))))))))
+                (move-log/step! rec (str "selection loaded " (count loaded-blocks) ", eligible " (count blocks)))
+                (if (seq blocks)
+                  (move-nodes blocks)
+                  (move-log/finish! rec)))))))
+          (p/catch (fn [e]
+                     (move-log/step! rec (str "ERROR " (or (ex-message e) e)))
+                     (move-log/finish! rec)
+                     (throw e)))))))
 
 (defn get-selected-ordered-blocks
   []

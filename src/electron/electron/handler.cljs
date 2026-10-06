@@ -303,6 +303,15 @@
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
 
+;; Appends 1 line to ~/.logseq/move-log/<day>.log (the editor's record of
+;; block moves, see frontend.handler.move-log)
+(defmethod handle :appendMoveLog [_window [_ line]]
+  (let [dir (node-path/join (utils/get-ls-dotdir-root) "move-log")
+        day (subs (.toISOString (js/Date.)) 0 10)]
+    (fs/mkdirSync dir #js {:recursive true})
+    (fs/appendFileSync (node-path/join dir (str day ".log")) (str line "\n"))
+    nil))
+
 (defmethod handle :setProxy [_win [_ options]]
   ;; options: {:type "system" | "direct" | "socks5" | "http" | ... }
   (p/do!
