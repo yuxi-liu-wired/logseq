@@ -38,6 +38,7 @@ Fixes open as upstream pull requests, carried here until upstream merges them (t
 - #13625, creating a page "Bar" while "Foo/Bar" exists, or "foo" while a tag "Foo" exists, creates the page instead of opening the other one (db-test #1345).
 - #13626, creating the tag "#Baz" while "#Foo/Baz" exists creates a top-level tag instead of returning Foo's Baz (db-test #1345).
 - #13630, #13631, #13632, #13633, app open: translations are built per language on first use, in the renderer and the Electron main process (about 400 ms and 280 ms of each open before), the code editor loads only when a code block is drawn (about 360 ms), the warm block cache starts empty (about 120 ms), and the main process loads the MCP SDK, fastify and the updater only when they are used (about 390 ms before the window).
+- #13634, app open: the compiled code of the page's scripts (main.js, 16 MB) is kept across opens; the home screen in about 1.6 s instead of 2.0 s at full clock.
 
 Fork only, never upstream: a move log. Every Shift+Alt+Up / Down (Cmd+Shift on macOS) appends 1 line to `~/.logseq/move-log/<day>.log`: the key, what was edited or selected, each step of the move with its time, the rows around the block before and after. A press that leaves the block where it was is marked MISS and shows a warning; a move key that reached the app but ran no move is logged as UNHANDLED (`src/main/frontend/handler/move_log.cljs`, the `:appendMoveLog` handler in `src/electron/electron/handler.cljs`).
 
