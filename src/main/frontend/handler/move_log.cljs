@@ -122,6 +122,10 @@
         ;; the rows the move can carry: a selected page title never moves
         movable (->> (array-seq (js/document.querySelectorAll ".ls-block.selected"))
                      (remove #(.querySelector % ":scope > .is-page-title-row"))
+                     ;; a selected row inside another selected row moves with
+                     ;; it: only the top-level rows are moved, so only they
+                     ;; say whether the move has somewhere to go
+                     (remove #(some-> (.-parentElement %) (.closest ".ls-block.selected")))
                      (keep #(.getAttribute % "blockid")))
         block-uuid (or (some-> edit-block :block/uuid str) (first movable) (some-> (first selected) str))]
     (reset! *last-run (js/performance.now))
