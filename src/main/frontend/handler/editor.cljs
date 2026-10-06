@@ -316,9 +316,23 @@
     (escape-editing)
     (p/resolved [nil nil nil])))
 
+(defonce ^:private *pending-new-block-done
+  ;; Resolves when the pending Enter (insert-new-block!) has moved the editor
+  ;; to the new block, or failed
+  (atom nil))
+
 (defn- start-pending-new-block!
   []
+  (let [resolve! (atom nil)
+        done (p/create (fn [resolve _reject] (reset! resolve! resolve)))]
+    (reset! *pending-new-block-done {:promise done :resolve! @resolve!}))
   (state/set-state! :editor/pending-new-block {:typed-text ""}))
+
+(defn <pending-new-block
+  "Settles when the pending Enter, if any, has moved the editor to the new
+  block."
+  []
+  (or (:promise @*pending-new-block-done) (p/resolved nil)))
 
 (defn- pending-new-block
   []
@@ -352,7 +366,10 @@
 
 (defn- clear-pending-new-block!
   []
-  (state/set-state! :editor/pending-new-block nil))
+  (state/set-state! :editor/pending-new-block nil)
+  (when-let [{:keys [resolve!]} @*pending-new-block-done]
+    (reset! *pending-new-block-done nil)
+    (resolve! nil)))
 
 (declare get-new-container-id)
 (declare delete-block-aux!)
@@ -1854,12 +1871,16 @@
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
-    ;; A Backspace or Delete join still running names the deleted block as
-    ;; the edited one; the move waits for it and moves the joined block
+    ;; A Backspace or Delete join, or an Enter, still running names the
+    ;; deleted / split block as the edited one; the move waits for it and
+    ;; moves the block the editor lands in
     (p/let [rec (move-log/start up? event)
-            pending? (some? (<pending-block-delete-or-nil))
-            _ (<pending-block-delete)]
-    (when pending? (move-log/step! rec "waited for a Backspace/Delete join"))
+            join? (some? (<pending-block-delete-or-nil))
+            enter? (pending-new-block?)
+            _ (<pending-block-delete)
+            _ (<pending-new-block)]
+    (when join? (move-log/step! rec "waited for a Backspace/Delete join"))
+    (when enter? (move-log/step! rec "waited for an Enter"))
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)]
