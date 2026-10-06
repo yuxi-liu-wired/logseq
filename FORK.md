@@ -12,7 +12,7 @@ The changes, one branch each:
 
 Fixes open as upstream pull requests, carried here until upstream merges them (the daily rebase then drops them; `scripts/fork-stack.sh` in the perf workspace rebuilds this list's commits onto a new base):
 
-- #13545, sync and undo: the full checksum recompute in 1 walk, the checksum's 2 keys in 1 transaction, on graphs that do not sync undo replays DataScript's own record of the change and no sync record is kept.
+- #13545, sync and undo: the full checksum recompute in 1 walk, the checksum's 2 keys in 1 transaction, on graphs that do not sync undo replays DataScript's own record of the change and no sync record is kept. A graph with a remote graph id (sync attached it by name, or an older version downloaded it) counts as syncing and keeps its records.
 - #13546, opening a page: rows below the fold render after the first paint.
 - #13547, the editor: the keystroke bookkeeping and the changed-path store above, and a delete sends no pre-read (the cursor moves when it is sent).
 - #13538, the maintainers' fix of a query table: a deleted row no longer turns the table into "Query error".
