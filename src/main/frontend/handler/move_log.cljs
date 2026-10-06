@@ -22,7 +22,10 @@
     (js/document.querySelector (str ".ls-block[blockid=\"" block-uuid "\"]"))))
 
 (defn- around
-  "The block's siblings on screen, 3 before and 3 after, the block in [ ]."
+  "Where the block is: its parent row, its place among all rows of the page
+  in screen order, and its siblings on screen (3 before, 3 after, the block
+  in [ ]). A move changes the place or the parent even when the block is an
+  only child before and after."
   [block-uuid]
   (if-let [^js node (block-node block-uuid)]
     (let [sibs (->> (array-seq (.-children (.-parentElement node)))
@@ -30,13 +33,44 @@
                                   (not (.contains (.-classList %) "block-add-button"))))
                     vec)
           i (.indexOf (clj->js sibs) node)
-          shown (subvec sibs (max 0 (- i 3)) (min (count sibs) (+ i 4)))]
-      {:index i
-       :text (string/join " | " (map #(if (identical? % node)
-                                         (str "[" (row-text %) "]")
-                                         (row-text %))
-                                      shown))})
-    {:index nil :text "(block not on screen)"}))
+          shown (subvec sibs (max 0 (- i 3)) (min (count sibs) (+ i 4)))
+          ^js parent (some-> (.-parentElement node) (.closest ".ls-block"))
+          parent-row (when (and parent (not (.querySelector parent ":scope > .is-page-title-row")))
+                       (row-text parent))
+          ^js root (or (.closest node ".page-blocks-inner") (.closest node ".blocks-container") js/document)
+          rows (array-seq (.querySelectorAll root ".ls-block:not(.block-add-button)"))
+          place (.indexOf (clj->js (vec rows)) node)]
+      {:where (str place "/" (some-> parent (.getAttribute "blockid")))
+       :text (str (when parent-row (str "(in " parent-row ") "))
+                  (string/join " | " (map #(if (identical? % node)
+                                             (str "[" (row-text %) "]")
+                                             (row-text %))
+                                          shown)))})
+    {:where nil :text "(block not on screen)"}))
+
+(defn- row-sibs
+  [^js node]
+  (when-let [^js p (some-> node .-parentElement)]
+    (->> (array-seq (.-children p))
+         (filter #(and (.contains (.-classList %) "ls-block")
+                       (not (.contains (.-classList %) "block-add-button"))))
+         vec)))
+
+(defn- can-move?
+  "Whether the move has somewhere to go, as the outliner decides it: a
+  sibling that way, or else a sibling of the parent row that way (1 level
+  out only)."
+  [block-uuid up?]
+  (when-let [^js node (block-node block-uuid)]
+    (let [sibs (row-sibs node)
+          i (.indexOf (clj->js sibs) node)
+          ^js parent (some-> (.-parentElement node) (.closest ".ls-block"))
+          parent (when (and parent (not (.querySelector parent ":scope > .is-page-title-row"))) parent)
+          psibs (when parent (row-sibs parent))
+          pi (when parent (.indexOf (clj->js psibs) parent))]
+      (if up?
+        (or (pos? i) (and parent (pos? pi)))
+        (or (< i (dec (count sibs))) (and parent (< pi (dec (count psibs)))))))))
 
 (defn- write!
   [line]
@@ -52,7 +86,9 @@
   if no move ran for it within 300 ms, it is logged as UNHANDLED (the key
   reached the app; no shortcut took it)."
   []
-  (when-not (.-__moveLogKeys js/window)
+  ;; a browser window only (not the unit tests' node)
+  (when (and (exists? js/window) (fn? (.-addEventListener js/window))
+             (not (.-__moveLogKeys js/window)))
     (set! (.-__moveLogKeys js/window) true)
     (.addEventListener
      js/window "keydown"
@@ -97,6 +133,7 @@
                    (or (.-key e) (.-identifier event)) (when (.-repeat e) " (held)"))))
      :mode (cond edit-block "editing" (seq selected) (str "selected " (count selected)) :else "nothing")
      :block block-uuid
+     :can-move (can-move? block-uuid up?)
      :before (around block-uuid)
      :steps (atom [])}))
 
@@ -114,15 +151,18 @@
      (fn []
        (let [after (around (:block record))
              before (:before record)
-             moved? (and (some? (:index after)) (some? (:index before))
-                         (not= (:text after) (:text before)))
+             moved? (and (some? (:where after)) (some? (:where before))
+                         (not= (:where after) (:where before)))
+             ;; a press with nowhere to go (first line up, last line down)
+             ;; is an EDGE, not a miss
+             verdict (cond moved? "moved" (:can-move record) "MISS" :else "EDGE")
              line (str (:at record) " " (:dir record) " "
-                       (if moved? "moved" "MISS") " key=" (:key record)
+                       verdict " key=" (:key record)
                        " " (:mode record) " block=" (:block record)
                        " steps=[" (string/join "; " @(:steps record)) "]"
                        " before=" (:text before) " after=" (:text after))]
          (write! line)
          ;; a miss shows on screen as it happens
-         (when-not moved?
+         (when (= verdict "MISS")
            (notification/show! (str "Move " (string/lower-case (:dir record)) " did not move the block. Logged in ~/.logseq/move-log/") :warning true nil 4000))))
      600)))
