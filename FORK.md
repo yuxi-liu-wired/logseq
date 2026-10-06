@@ -24,6 +24,7 @@ Fixes open as upstream pull requests, carried here until upstream merges them (t
 - #13606, a move up or down never carries a block into another page (db-test #1318).
 - #13607, move up/down takes its target in page order, not click order (db-test #1316).
 - #13608, outdenting a selection over 2 levels never moves a block deeper (db-test #1319).
+- #13609, an unchecked checkbox sorts as false in a table, not as a missing value (db-test #1321).
 
 Fork only, never upstream: a move log. Every Shift+Alt+Up / Down (Cmd+Shift on macOS) appends 1 line to `~/.logseq/move-log/<day>.log`: the key, what was edited or selected, each step of the move with its time, the rows around the block before and after. A press that leaves the block where it was is marked MISS and shows a warning; a move key that reached the app but ran no move is logged as UNHANDLED (`src/main/frontend/handler/move_log.cljs`, the `:appendMoveLog` handler in `src/electron/electron/handler.cljs`).
 
