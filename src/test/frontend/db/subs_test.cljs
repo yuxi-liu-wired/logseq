@@ -7,9 +7,29 @@
             [frontend.worker.handler.render-resource.engine :as render-engine]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [cljs.cache :as cache]
+            [tailrecursion.priority-map :as priority-map]))
 
 (def ^:private test-graph-id "subs-test-graph")
+
+(deftest empty-warm-cache-evicts-as-the-factory-cache-test
+  ;; the warm cache is built empty (no 20000 placeholder entries); it must
+  ;; hold, hit and evict exactly as lru-cache-factory's cache of that size
+  (let [limit 5
+        ops (concat (map (fn [i] [:miss i]) (range 8))
+                    [[:hit 4] [:miss 9] [:evict 6] [:miss 10] [:miss 4] [:miss 11]])
+        run (fn [c] (reduce (fn [c [op k]]
+                              (case op
+                                :miss (cache/miss c k (str "v" k))
+                                :hit (cache/hit c k)
+                                :evict (cache/evict c k)))
+                            c ops))
+        factory (run (cache/lru-cache-factory {} :threshold limit))
+        lean (run (cache/->LRUCache {} (priority-map/priority-map) 0 limit))]
+    (is (= (into {} (seq factory)) (into {} (seq lean))))
+    (is (= limit (count lean)))
+    (is (some? (#'subs/empty-warm-cache)))))
 
 (defn- block
   ([block-uuid tx-id title]
