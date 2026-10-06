@@ -137,9 +137,10 @@
                    (or (.-key e) (.-identifier event)) (when (.-repeat e) " (held)"))))
      :mode (cond edit-block "editing" (seq selected) (str "selected " (count selected)) :else "nothing")
      :block block-uuid
+     :up? up?
      ;; a selection moves as 1 piece: down has somewhere to go if its last
      ;; row (page order) does, up if its first row does
-     :can-move (can-move? (or (if up? (first movable) (last movable)) block-uuid) up?)
+     :edge-block (or (if up? (first movable) (last movable)) block-uuid)
      :before (around block-uuid)
      :steps (atom [])}))
 
@@ -162,8 +163,11 @@
              moved? (and (some? (:where after)) (some? (:where before))
                          (not= (:where after) (:where before)))
              ;; a press with nowhere to go (first line up, last line down)
-             ;; is an EDGE, not a miss
-             verdict (cond moved? "moved" (:can-move record) "MISS" :else "EDGE")
+             ;; is an EDGE, not a miss. Judged on the page as it is now:
+             ;; rows a delete or a move before this one took away are gone
+             ;; by then (this move ran after them)
+             can-move (can-move? (:edge-block record) (:up? record))
+             verdict (cond moved? "moved" can-move "MISS" :else "EDGE")
              line (str (:at record) " " (:dir record) " "
                        verdict " key=" (:key record)
                        " " (:mode record) " block=" (:block record)
