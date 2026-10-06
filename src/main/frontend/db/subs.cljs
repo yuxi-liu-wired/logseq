@@ -2,10 +2,10 @@
   "Immutable renderer snapshots loaded from the worker-owned graph database."
   (:require [cljs.cache :as cache]
             [clojure.set :as set]
+            [frontend.common.cache :as common-cache]
             [frontend.db.subs-loader :as loader]
             [frontend.state :as state]
-            [promesa.core :as p]
-            [tailrecursion.priority-map :as priority-map]))
+            [promesa.core :as p]))
 
 (def ^:private loading-snapshot {:status :loading})
 (def ^:private warm-cache-size 20000)
@@ -28,13 +28,8 @@
         (require-revision! :block/tx-id (:block/tx-id new-block))))
 
 (defn- empty-warm-cache
-  "An empty LRU cache of `warm-cache-size` entries. lru-cache-factory seeds
-  its eviction queue with `limit` placeholder entries, 20000 here, which cost
-  about 120 ms on every app open; the cache evicts by the queue's real size
-  (`miss` evicts once it holds `limit` entries), so an empty queue behaves
-  the same."
   []
-  (cache/->LRUCache {} (priority-map/priority-map) 0 warm-cache-size))
+  (common-cache/empty-lru warm-cache-size))
 
 (defn- empty-store
   [graph-id generation]
