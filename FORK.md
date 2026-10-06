@@ -17,6 +17,7 @@ Fixes open as upstream pull requests, carried here until upstream merges them (t
 - #13547, the editor: the keystroke bookkeeping and the changed-path store above, and a delete sends no pre-read (the cursor moves when it is sent).
 - #13538, the maintainers' fix of a query table: a deleted row no longer turns the table into "Query error".
 - #13598, moving a block: Shift+Alt+Down past the window's bottom edge scrolls the page with the block.
+- #13599, moving selected blocks: the selection follows the moved rows; Shift+Down after a move no longer selects the page title.
 
 Fork only, never upstream: a move log. Every Shift+Alt+Up / Down (Cmd+Shift on macOS) appends 1 line to `~/.logseq/move-log/<day>.log`: the key, what was edited or selected, each step of the move with its time, the rows around the block before and after. A press that leaves the block where it was is marked MISS and shows a warning; a move key that reached the app but ran no move is logged as UNHANDLED (`src/main/frontend/handler/move_log.cljs`, the `:appendMoveLog` handler in `src/electron/electron/handler.cljs`).
 
