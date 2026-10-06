@@ -150,10 +150,12 @@
     (swap! (:steps record) conj (str (js/Math.round (- (js/performance.now) (:t0 record))) "ms " what))))
 
 (defn finish!
-  "1 frame after the move settles: where the block is now. Writes the line."
+  "Where the block is once the move is drawn: the UI draws a move on the
+  frame after it applies, so the second frame from now. Writes the line."
   [record]
   (when record
-    (js/setTimeout
+    (js/requestAnimationFrame
+     #(js/requestAnimationFrame
      (fn []
        (let [after (around (:block record))
              before (:before record)
@@ -170,5 +172,4 @@
          (write! line)
          ;; a miss shows on screen as it happens
          (when (= verdict "MISS")
-           (notification/show! (str "Move " (string/lower-case (:dir record)) " did not move the block. Logged in ~/.logseq/move-log/") :warning true nil 4000))))
-     600)))
+           (notification/show! (str "Move " (string/lower-case (:dir record)) " did not move the block. Logged in ~/.logseq/move-log/") :warning true nil 4000))))))))
