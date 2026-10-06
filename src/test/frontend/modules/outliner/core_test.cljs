@@ -1050,10 +1050,6 @@
             (let [total (get-blocks-count)]
               (is (= total (count @*random-blocks))))))))))
 
-(defn- parent-id
-  [id]
-  (:block/uuid (:block/parent (get-block id))))
-
 (defn- page-order
   "Every block under page 1 in page order (depth first)."
   []
