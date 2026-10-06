@@ -34,6 +34,7 @@ Fixes open as upstream pull requests, carried here until upstream merges them (t
 - #13620, a namespace root can no longer be renamed to the name of a top-level page, or the other way around (db-test #1346).
 - #13621, a table cell popup that hides after the table re-rendered or the page changed no longer throws a null `.focus` (db-test #1357).
 - #13623, the value popup of a property with closed values and no type shows its choices instead of "Something wrong" (db-test #1363).
+- #13624, a reload after creating a graph opens the new graph, not the one opened before it (db-test #1361).
 
 Fork only, never upstream: a move log. Every Shift+Alt+Up / Down (Cmd+Shift on macOS) appends 1 line to `~/.logseq/move-log/<day>.log`: the key, what was edited or selected, each step of the move with its time, the rows around the block before and after. A press that leaves the block where it was is marked MISS and shows a warning; a move key that reached the app but ran no move is logged as UNHANDLED (`src/main/frontend/handler/move_log.cljs`, the `:appendMoveLog` handler in `src/electron/electron/handler.cljs`).
 
