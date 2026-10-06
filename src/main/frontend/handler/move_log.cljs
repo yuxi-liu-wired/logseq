@@ -133,7 +133,11 @@
                    (or (.-key e) (.-identifier event)) (when (.-repeat e) " (held)"))))
      :mode (cond edit-block "editing" (seq selected) (str "selected " (count selected)) :else "nothing")
      :block block-uuid
-     :can-move (can-move? block-uuid up?)
+     ;; a selection moves as 1 piece: down has somewhere to go if its last
+     ;; row (page order) does, up if its first row does
+     :can-move (let [nodes (array-seq (js/document.querySelectorAll ".ls-block.selected"))
+                     edge (if up? (first nodes) (last nodes))]
+                 (can-move? (or (some-> edge (.getAttribute "blockid")) block-uuid) up?))
      :before (around block-uuid)
      :steps (atom [])}))
 
