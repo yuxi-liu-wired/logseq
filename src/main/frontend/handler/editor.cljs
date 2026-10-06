@@ -1915,6 +1915,21 @@
   ;; rows; a move pressed before that would read the old selection
   (atom nil))
 
+(defn- move-scroll-context
+  []
+  [(state/get-current-repo) (state/get-route-match)])
+
+(defn- moved-row
+  "The row of block `block-id` in container `container-id`, else its first."
+  [block-id container-id]
+  (let [rows (util/get-blocks-by-id block-id)]
+    (or (when container-id
+          (some #(when (= container-id (some-> (util/rec-get-node % "blocks-container")
+                                               get-node-container-id))
+                   %)
+                rows))
+        (first rows))))
+
 (defn move-up-down
   [up?]
   (fn [event]
@@ -1936,8 +1951,15 @@
     (when enter? (move-log/step! rec "waited for an Enter"))
     (when reselect? (move-log/step! rec "waited for the last move's reselect"))
     (let [edit-block-id (:block/uuid (state/get-edit-block))
+          start-context (move-scroll-context)
           move-nodes (fn [blocks]
-                       (let [blocks' (block-handler/get-top-level-blocks blocks)]
+                       (let [blocks' (block-handler/get-top-level-blocks blocks)
+                             block-id (str (:block/uuid (first blocks)))
+                             ;; the view the block is moved in: it can also be
+                             ;; drawn in an embed or the sidebar
+                             container-id (some-> (util/get-first-block-by-id block-id)
+                                                  (util/rec-get-node "blocks-container")
+                                                  get-node-container-id)]
                          (move-log/step! rec (str "send " (count blocks') " block(s): "
                                                   (string/join "," (map #(str (:block/title %) "@" (:block/order %)) blocks'))))
                          (p/let [result (ui-outliner-tx/transact!
@@ -1947,11 +1969,13 @@
                            (move-log/step! rec "applied")
                            (move-log/finish! rec)
                            ;; the moved row is drawn in its new place on the
-                           ;; next frame; scroll that place into view
+                           ;; next frame; scroll that place into view, if the
+                           ;; page and graph are still the ones moved in
                            (js/requestAnimationFrame
                             (fn []
-                              (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
-                                (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))
+                              (when (= start-context (move-scroll-context))
+                                (when-let [block-node (moved-row block-id container-id)]
+                                  (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))))
                            result)))]
       (-> (p/let [root-block (get-focused-root-block)]
         (if edit-block-id
