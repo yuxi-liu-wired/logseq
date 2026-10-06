@@ -1857,6 +1857,11 @@
        (not (comments-model/protected-comment-block? block))
        (not (focused-root-block? block root-block))))
 
+(defonce ^:private *pending-move-reselect
+  ;; Resolves when the last move of selected blocks has selected their new
+  ;; rows; a move pressed before that would read the old selection
+  (atom nil))
+
 (defn move-up-down
   [up?]
   (fn [event]
@@ -1864,14 +1869,19 @@
     (state/pub-event! [:editor/hide-action-bar])
     ;; A Backspace or Delete join, or an Enter, still running names the
     ;; deleted / split block as the edited one; the move waits for it and
-    ;; moves the block the editor lands in
-    (p/let [rec (move-log/start up? event)
-            join? (some? (<pending-block-delete-or-nil))
+    ;; moves the block the editor lands in. A move of selected blocks still
+    ;; reselecting their rows: waits for it too
+    (p/let [join? (some? (<pending-block-delete-or-nil))
             enter? (pending-new-block?)
+            reselect? (some? @*pending-move-reselect)
             _ (<pending-block-delete)
-            _ (<pending-new-block)]
+            _ (<pending-new-block)
+            _ (or @*pending-move-reselect (p/resolved nil))
+            ;; the record starts after the waits: it reads the selection
+            rec (move-log/start up? event)]
     (when join? (move-log/step! rec "waited for a Backspace/Delete join"))
     (when enter? (move-log/step! rec "waited for an Enter"))
+    (when reselect? (move-log/step! rec "waited for the last move's reselect"))
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)]
@@ -1917,16 +1927,22 @@
                       blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
                 (move-log/step! rec (str "selection loaded " (count loaded-blocks) ", eligible " (count blocks)))
                 (if (seq blocks)
-                  (p/do!
-                   (move-nodes blocks)
-                   ;; a moved block is drawn as a new row; the selection held
-                   ;; the old rows, no longer in the page. Select the new
-                   ;; rows on the next frame
-                   (js/requestAnimationFrame
-                    (fn []
-                      (let [nodes (keep #(some-> % str util/get-first-block-by-id) ids)]
-                        (when (= (count nodes) (count ids))
-                          (state/set-selection-blocks! nodes direction))))))
+                  (let [done (p/deferred)]
+                    (reset! *pending-move-reselect done)
+                    (-> (p/do!
+                         (move-nodes blocks)
+                         ;; a moved block is drawn as a new row; the selection
+                         ;; held the old rows, no longer in the page. Select
+                         ;; the new rows once they are drawn (the move's delta
+                         ;; is flushed when move-nodes settles); the next move
+                         ;; waits for this
+                         (let [nodes (keep #(some-> % str util/get-first-block-by-id) ids)]
+                           (when (= (count nodes) (count ids))
+                             (state/set-selection-blocks! nodes direction))))
+                        (p/finally (fn []
+                                     (p/resolve! done nil)
+                                     (when (identical? @*pending-move-reselect done)
+                                       (reset! *pending-move-reselect nil))))))
                   (move-log/finish! rec)))))))
           (p/catch (fn [e]
                      (move-log/step! rec (str "ERROR " (or (ex-message e) e)))
