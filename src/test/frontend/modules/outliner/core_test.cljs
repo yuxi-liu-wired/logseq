@@ -444,6 +444,7 @@
      (outliner-core/move-blocks-up-down! (conn/get-db test-db false) [(get-block 9)] true))
     (is (= [3 9 6] (get-children 2)))))
 
+<<<<<<< HEAD
 (defn- move-up-down!
   [ids up?]
   (outliner-tx/transact!
@@ -553,6 +554,20 @@
                                            [(get-block 41) (get-block 51)] up?))
       (is (= [41 42 43] (get-children 1)))
       (is (= [51 52] (get-children 50))))))
+=======
+(deftest test-move-blocks-up-down-click-order
+  (testing "blocks selected bottom first move as when selected top first (db-test #1316)"
+    (doseq [[ids up? expected] [[[43 42] true [42 43 41 44]]
+                                [[43 42] false [41 44 42 43]]
+                                [[42 43] true [42 43 41 44]]
+                                [[42 43] false [41 44 42 43]]]]
+      (transact-tree! [[40 [[41] [42] [43] [44]]]])
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/move-blocks-up-down! (conn/get-db test-db false)
+                                           (mapv get-block ids) up?))
+      (is (= expected (get-children 40)) (str ids " " (if up? "up" "down"))))))
+>>>>>>> 5faa48ca01 (fix(outliner): move up/down takes its target in page order, not click order)
 
 (deftest test-insert-blocks
   (testing "
