@@ -28,6 +28,7 @@ Fixes open as upstream pull requests, carried here until upstream merges them (t
 - #13610, "does not contain" ignores case like "contains"; a missing value sorts last in query and grouped tables (db-test #1322, #1320).
 - #13615, a repeating Deadline or Scheduled steps months and years in the local calendar: east of UTC, March 1 monthly comes back April 1, not March 29 (db-test #1355).
 - #13616, a Deadline or Scheduled cleared with the date picker's trash button no longer makes checking a repeating task fail (db-test #1353).
+- #13617, a `"` or `\` in a page or tag title no longer breaks the queries that name it (db-test #1374).
 
 Fork only, never upstream: a move log. Every Shift+Alt+Up / Down (Cmd+Shift on macOS) appends 1 line to `~/.logseq/move-log/<day>.log`: the key, what was edited or selected, each step of the move with its time, the rows around the block before and after. A press that leaves the block where it was is marked MISS and shows a warning; a move key that reached the app but ran no move is logged as UNHANDLED (`src/main/frontend/handler/move_log.cljs`, the `:appendMoveLog` handler in `src/electron/electron/handler.cljs`).
 
