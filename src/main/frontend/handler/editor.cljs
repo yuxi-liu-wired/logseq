@@ -1885,7 +1885,8 @@
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)]
-                         (move-log/step! rec (str "send " (count blocks') " block(s)"))
+                         (move-log/step! rec (str "send " (count blocks') " block(s): "
+                                                  (string/join "," (map #(str (:block/title %) "@" (:block/order %)) blocks'))))
                          (p/let [result (ui-outliner-tx/transact!
                                          (merge {:outliner-op :move-blocks}
                                                 (block-handler/outliner-tx-meta (first blocks')))
@@ -1936,7 +1937,10 @@
                          ;; the new rows once they are drawn (the move's delta
                          ;; is flushed when move-nodes settles); the next move
                          ;; waits for this
-                         (let [nodes (keep #(some-> % str util/get-first-block-by-id) ids)]
+                         ;; in the order the selection is kept (`ids` is read
+                         ;; through the direction, reversed for :up)
+                         (let [nodes (keep #(some-> % str util/get-first-block-by-id) ids)
+                               nodes (if (= direction :up) (reverse nodes) nodes)]
                            (when (= (count nodes) (count ids))
                              (state/set-selection-blocks! nodes direction))))
                         (p/finally (fn []

@@ -434,6 +434,22 @@
   [id]
   (:block/uuid (:block/parent (get-block id))))
 
+(deftest test-move-blocks-up-down-twice
+  (testing "up twice: 2 blocks go up 1 place per move"
+    (transact-tree! [[1000 [[1001] [1002] [1003] [1004]]]])
+    (move-up-down! [1003 1004] true)
+    (is (= [1001 1003 1004 1002] (get-children 1000)))
+    (move-up-down! [1003 1004] true)
+    (is (= [1003 1004 1001 1002] (get-children 1000)))))
+
+(deftest test-move-blocks-up-down-twice-down
+  (testing "down twice: 2 blocks go down 1 place per move"
+    (transact-tree! [[2000 [[2001] [2002] [2003] [2004]]]])
+    (move-up-down! [2001 2002] false)
+    (is (= [2003 2001 2002 2004] (get-children 2000)))
+    (move-up-down! [2001 2002] false)
+    (is (= [2003 2004 2001 2002] (get-children 2000)))))
+
 (deftest test-move-blocks-up-down-cases
   ;; tree:
   ;; [22 [[2 [[3 [[4] [5]]]
