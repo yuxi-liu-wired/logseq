@@ -119,7 +119,11 @@
   [up? ^js event]
   (let [edit-block (state/get-edit-block)
         selected (state/get-selection-block-ids)
-        block-uuid (or (some-> edit-block :block/uuid str) (some-> (first selected) str))]
+        ;; the rows the move can carry: a selected page title never moves
+        movable (->> (array-seq (js/document.querySelectorAll ".ls-block.selected"))
+                     (remove #(.querySelector % ":scope > .is-page-title-row"))
+                     (keep #(.getAttribute % "blockid")))
+        block-uuid (or (some-> edit-block :block/uuid str) (first movable) (some-> (first selected) str))]
     (reset! *last-run (js/performance.now))
     {:t0 (js/performance.now)
      :at (.toISOString (js/Date.))
@@ -135,9 +139,7 @@
      :block block-uuid
      ;; a selection moves as 1 piece: down has somewhere to go if its last
      ;; row (page order) does, up if its first row does
-     :can-move (let [nodes (array-seq (js/document.querySelectorAll ".ls-block.selected"))
-                     edge (if up? (first nodes) (last nodes))]
-                 (can-move? (or (some-> edge (.getAttribute "blockid")) block-uuid) up?))
+     :can-move (can-move? (or (if up? (first movable) (last movable)) block-uuid) up?)
      :before (around block-uuid)
      :steps (atom [])}))
 
