@@ -37,6 +37,7 @@ Fixes open as upstream pull requests, carried here until upstream merges them (t
 - #13624, a reload after creating a graph opens the new graph, not the one opened before it (db-test #1361).
 - #13625, creating a page "Bar" while "Foo/Bar" exists, or "foo" while a tag "Foo" exists, creates the page instead of opening the other one (db-test #1345).
 - #13626, creating the tag "#Baz" while "#Foo/Baz" exists creates a top-level tag instead of returning Foo's Baz (db-test #1345).
+- #13630, #13631, #13632, app open: translations are built per language on first use (about 400 ms of each open before), the code editor loads only when a code block is drawn (about 360 ms), the warm block cache starts empty (about 120 ms).
 
 Fork only, never upstream: a move log. Every Shift+Alt+Up / Down (Cmd+Shift on macOS) appends 1 line to `~/.logseq/move-log/<day>.log`: the key, what was edited or selected, each step of the move with its time, the rows around the block before and after. A press that leaves the block where it was is marked MISS and shows a warning; a move key that reached the app but ran no move is logged as UNHANDLED (`src/main/frontend/handler/move_log.cljs`, the `:appendMoveLog` handler in `src/electron/electron/handler.cljs`).
 
