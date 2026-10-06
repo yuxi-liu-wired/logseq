@@ -18,6 +18,8 @@ Fixes open as upstream pull requests, carried here until upstream merges them (t
 - #13538, the maintainers' fix of a query table: a deleted row no longer turns the table into "Query error".
 - #13598, moving a block: Shift+Alt+Down past the window's bottom edge scrolls the page with the block.
 
+Fork only, never upstream: a move log. Every Shift+Alt+Up / Down (Cmd+Shift on macOS) appends 1 line to `~/.logseq/move-log/<day>.log`: the key, what was edited or selected, each step of the move with its time, the rows around the block before and after. A press that leaves the block where it was is marked MISS and shows a warning; a move key that reached the app but ran no move is logged as UNHANDLED (`src/main/frontend/handler/move_log.cljs`, the `:appendMoveLog` handler in `src/electron/electron/handler.cljs`).
+
 Measured result on the same graph, key press to next frame, p50 / p90 / max over 83 keys, in the box on a virtual display: journals page 15.7 / 25.2 / 45 before, 4.3 / 6.2 / 14.1 after; a 204 KB page 44.7 / 50.7 / 66 before, 8.7 / 10.5 / 13.7 after; a 337 KB page 27.9 / 32 / 43 before, 4.5 / 11.1 / 29.9 after. Key handler time per key on the 204 KB page: 11 ms before, 0.7 ms after. Block-to-block arrow moves: 44 ms with 38 stalls in 40 moves before, 21 ms with none after.
 
 Rebasing onto a newer upstream, from a clone with `origin` = `logseq/logseq` and `fork` = this repository:
