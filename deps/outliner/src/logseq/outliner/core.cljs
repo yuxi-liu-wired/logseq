@@ -1483,6 +1483,13 @@
   {:pre [(seq blocks) (boolean? up?)]}
   (let [db @conn
         top-level-blocks (filter-top-level-blocks db blocks)
+        ;; the target comes from the selection's first block (up) or last
+        ;; (down): in page order, whatever order the blocks were clicked in
+        ;; (Ctrl+click c, then b: the selection reads c, b)
+        top-level-blocks (if (and (> (count top-level-blocks) 1)
+                                  (apply = (map #(:db/id (:block/page %)) top-level-blocks)))
+                           (ldb/sort-page-random-blocks db top-level-blocks)
+                           top-level-blocks)
         opts {:outliner-op :move-blocks-up-down}
         pages (set (map #(:db/id (:block/page (d/entity db (:db/id %)))) top-level-blocks))]
     (cond
@@ -1521,8 +1528,8 @@
         (when (and right
                    (not (and (:logseq.property/created-from-property last-top-block)
                              (nil? last-top-block-right))))
-          (move-blocks conn blocks right (merge opts {:sibling? sibling?
-                                                      :up? up?})))))))
+          (move-blocks conn top-level-blocks right (merge opts {:sibling? sibling?
+                                                                :up? up?})))))))
 
 (defn- ^:large-vars/cleanup-todo indent-outdent-blocks
   "Indent or outdent `blocks`."
