@@ -2183,10 +2183,17 @@
 (def ^:private embed-macro-re #"\s*\{\{embed\s+(.+?)\s*\}\}")
 
 (defn- title-without-embed
-  "The block's text besides its embed macro, or nil when the block is only the embed"
-  [title]
+  "The block's text besides its embed macro, or nil when the block is only the
+  embed. A heading marker or the block's task marker is not text: `### {{embed
+  ...}}` and `DONE {{embed ...}}` are embed blocks with a heading or a status."
+  [title marker]
   (when (string? title)
-    (let [text (string/trim (string/replace title embed-macro-re ""))]
+    (let [text (-> (string/replace title embed-macro-re "")
+                   string/trim
+                   (string/replace #"^#+(?:\s+|$)" ""))
+          text (if (and marker (string/starts-with? text marker))
+                 (string/trim (subs text (count marker)))
+                 text)]
       (when-not (string/blank? text) text))))
 
 (defn- handle-embeds
@@ -2214,7 +2221,7 @@
 
                         :else
                         (log-fn :invalid-embed-arguments "Ignore embed because of invalid arguments" :args (:arguments (second embed-node))))
-          text (title-without-embed (:block/title block))]
+          text (title-without-embed (:block/title block) (:block/marker block))]
       (cond
         (not (uuid? target-uuid))
         block
