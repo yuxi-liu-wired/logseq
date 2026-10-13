@@ -726,6 +726,77 @@ abc
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
 
+(deftest-async import-keeps-text-around-embeds-unknown-embeds-and-multiline-math
+  (p/let [source-file (write-temp-graph-file
+                       "pages/A.md"
+                       (str "- Beta {{embed [[Alpha]]}} after\n"
+                            "- {{embed [[Gamma]]}}\n"
+                            "- b {{embed [[10307562-adaf-4557-89c4-bc8bbcd0d20e]]}}\n"
+                            "- $$\n"
+                            "  E = mc^2\n"
+                            "  $$\n"
+                            "- last\n"))
+          alpha-file (write-temp-graph-file "pages/Alpha.md" "- alpha\n")
+          gamma-file (write-temp-graph-file "pages/Gamma.md" "- gamma\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file alpha-file gamma-file] conn {})
+          page-a (db-test/find-page-by-title @conn "A")
+          blocks (->> (:block/_parent page-a) (sort-by :block/order) vec)]
+    (is (= 5 (count blocks))
+        "The whole file imports")
+    (is (= "Beta after" (:block/title (nth blocks 0)))
+        "Text around an embed is kept")
+    (is (= ["Alpha"] (map (comp :block/title :block/link) (:block/_parent (nth blocks 0))))
+        "The embed of a block with text is its child block")
+    (is (= "Gamma" (:block/title (:block/link (nth blocks 1))))
+        "A block that is only an embed links its target")
+    (is (string/starts-with? (:block/title (nth blocks 2)) "b")
+        "An embed of an unknown page keeps the block")
+    (is (= "E = mc^2" (:block/title (nth blocks 3)))
+        "A multi-line display math block keeps its formula")
+    (is (= :math (:logseq.property.node/display-type (nth blocks 3)))
+        "A multi-line display math block is a math block")
+    (is (= "last" (:block/title (nth blocks 4))))))
+
+(deftest-async import-embed-with-heading-or-status
+  (p/let [source-file (write-temp-graph-file
+                       "pages/E.md"
+                       (str "- ### {{embed [[Alpha]]}}\n"
+                            "- DONE {{embed [[Alpha]]}}\n"))
+          alpha-file (write-temp-graph-file "pages/Alpha.md" "- alpha\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file alpha-file] conn {})
+          [heading-embed done-embed :as blocks] (->> (:block/_parent (db-test/find-page-by-title @conn "E")) (sort-by :block/order))]
+    (is (= 2 (count blocks)) "no extra child blocks")
+    (is (= "Alpha" (:block/title (:block/link heading-embed))) "an embed with a heading is an embed block")
+    (is (= 3 (:logseq.property/heading heading-embed)))
+    (is (= "Alpha" (:block/title (:block/link done-embed))) "an embed with a status is an embed block")
+    (is (= :logseq.property/status.done (:db/ident (:logseq.property/status done-embed))))))
+
+(deftest-async import-thematic-break-block
+  (p/let [source-file (write-temp-graph-file "pages/H.md" "- a\n- ---\n- b\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file] conn {})
+          blocks (->> (:block/_page (db-test/find-page-by-title @conn "H")) (sort-by :block/order))]
+    (is (= ["a" "---" "b"] (mapv :block/title blocks))
+        "a block whose text is a thematic break keeps it")))
+
+(deftest-async import-multiline-math-as-first-block
+  (p/let [source-file (write-temp-graph-file
+                       "pages/M.md"
+                       (str "- $$\n"
+                            "  E = mc^2\n"
+                            "  $$\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [source-file] conn {})
+          block (first (:block/_page (db-test/find-page-by-title @conn "M")))]
+    (is (= "E = mc^2" (:block/title block)))
+    (is (= :math (:logseq.property.node/display-type block)))))
+
 (deftest-async import-removes-pre-block-marker-and-missing-block-refs
   (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
         missing-embed-uuid #uuid "55555555-5555-5555-5555-555555555555"
