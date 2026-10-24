@@ -1,0 +1,97 @@
+This fork is the Logseq DB version its owner uses: upstream `master` plus every fix of ours that upstream has not merged yet. It began with making typing fast on a large graph. The branch `fork/main` carries every change on top of upstream `master`, and this file records what the changes are, how to rebase them onto a newer upstream, how to build a runnable desktop app from them, and how to measure that they still work.
+
+Upstream base: `logseq/logseq` master, rebased onto its head by the "Fork nightly" workflow on every push to `fork/main` and once a day; `d24abc91` on 2026-10-10. Store dependency: this fork's copy of `logseq/rfx` at `https://github.com/yuxi-liu-wired/rfx`, branch `perf/incremental-subscription-updates`, commit `3dbe738`, pinned in `deps.edn`.
+
+The problem being fixed: on a graph of about 2,000 pages and 150,000 blocks, each keystroke took 72 ms from key press to paint (p90 112 ms) and one key in four stalled the main thread for over 50 ms. A CPU profile put 36 percent of the time inside the state store's `next-state!`, which re-evaluated every mounted subscription on every state write, and each keystroke wrote the store five times. The rest was the editor box re-rendering on every key: the autosize textarea re-measuring, a hidden one-span-per-character mirror of the text being rebuilt, and a command-trigger check running as a render effect.
+
+The changes, one branch each:
+
+- `perf/editor-state-atoms` (`src/main/frontend/state.cljs`, `handler/editor.cljs`, `components/block/comments.cljs`): last input time, saved cursor, and the UI's last key code move out of the reactive store into plain atoms. Nothing subscribed to them. The editor's last key code, which nothing read, is removed; that commit is the maintainer's.
+- `perf/store-changed-paths` (`rfx.cljs`, `state.cljs`, `deps.edn`): state writes pass the changed path to the store, and a mapping from each subscription to the state path it reads, so the store re-evaluates only the subscriptions reading that path. Depends on the rfx change below.
+- In the rfx fork, `perf/incremental-subscription-updates` (`modules/rfx/src/io/factorhouse/rfx/store.cljc`, `stores/atom.cljc`, `test/rfx/store_incremental_test.clj`): the atom store indexes cached subscriptions by the state paths they read and, on a write, evicts and recomputes only those under the changed paths. Without a `!sub-key-fn` it behaves as before.
+
+Fixes open as upstream pull requests, carried here until upstream merges them (the daily rebase then drops them; `scripts/fork-stack.sh` in the perf workspace rebuilds this list's commits onto a new base):
+
+- #13545, sync and undo: the full checksum recompute in 1 walk, the checksum's 2 keys in 1 transaction, on graphs that do not sync undo replays DataScript's own record of the change and no sync record is kept. A graph with a remote graph id (sync attached it by name, or an older version downloaded it) counts as syncing and keeps its records.
+- #13546, opening a page: rows below the fold render after the first paint.
+- #13547, the editor: the keystroke bookkeeping and the changed-path store above, and a delete sends no pre-read (the cursor moves when it is sent).
+- #13538, the maintainers' fix of a query table: a deleted row no longer turns the table into "Query error".
+- #13598, moving a block: Shift+Alt+Down past the window's bottom edge scrolls the page with the block.
+- #13599, moving selected blocks: the selection follows the moved rows; Shift+Down after a move no longer selects the page title.
+- #13603, moving right after Enter or a Backspace/Delete join: the move waits for it and moves the block the editor lands in, instead of moving the split block or nothing.
+- #13604, tests only: move up/down cases (children, edges, several blocks, repeated moves).
+- #13605, moving a last child with the block after its parent: they move in page order (db-test #1297).
+- #13606, a move up or down never carries a block into another page (db-test #1318).
+- #13608, outdenting a selection over 2 levels never moves a block deeper (db-test #1319).
+- #13609, an unchecked checkbox sorts as false in a table, not as a missing value (db-test #1321).
+- #13610, "does not contain" ignores case like "contains"; a missing value sorts last in query and grouped tables (db-test #1322, #1320).
+- #13616, a Deadline or Scheduled cleared with the date picker's trash button no longer makes checking a repeating task fail (db-test #1353).
+- #13617, a `"`, `\` or `[[...]]` in a page or tag title no longer breaks the queries that name it (db-test #1374).
+- #13618, typing a property's name in another case adds that property, even when a tag of the same name exists, instead of creating a second one (db-test #1351).
+- #13619, creating "Foo/Baz" after "Bar/Foo" makes a new top-level Foo instead of going under Bar's Foo; the same for tags (db-test #1348).
+- #13620, a namespace root can no longer be renamed to the name of a top-level page, or the other way around (db-test #1346).
+- #13621, a table cell popup that hides after the table re-rendered or the page changed no longer throws a null `.focus` (db-test #1357).
+- #13623, the value popup of a property with closed values and no type shows its choices instead of "Something wrong" (db-test #1363).
+- #13625, creating a page "Bar" while "Foo/Bar" exists, or "foo" while a tag "Foo" exists, creates the page instead of opening the other one (db-test #1345).
+- #13626, creating the tag "#Baz" while "#Foo/Baz" exists creates a top-level tag instead of returning Foo's Baz (db-test #1345).
+- #13630, #13631, #13633, app open: translations are built per language on first use, in the renderer and the Electron main process (about 400 ms and 280 ms of each open before), the code editor loads only when a code block is drawn (about 360 ms), and the main process loads the MCP SDK, fastify and the updater only when they are used (about 390 ms before the window).
+- #13672, a math block typed as `$$E=mc^2$$` and left with a click or Up/Down draws the formula instead of a red `$$E=mc^2$$`.
+- #13673, tests only: the outliner core cases mutation testing found no test checked.
+- #13677, Alt+Shift+Up on the second value of a many-valued property swaps the two values instead of turning the moved value into an ordinary child block.
+- #13675, an edit that removes a block's last reference to an empty page (typed as `[[Brand new]]`, then deleted) deletes that page, as intended; before, no page was ever deleted.
+- #13679, #13680, #13682, tests only: from whole-codebase mutation testing, the operator changes the suite let through in the outliner's property and op construction code, `logseq.db`, the graph export, the sync checksum and server handler, and the worker's undo/redo, db validation and pipeline.
+- #13681, a table or list view export keeps a row whose parent block is also a row; before, that row was left out of the export and lost on import (found by mutation testing).
+
+Fork only, never upstream: a move log. Every Shift+Alt+Up / Down (Cmd+Shift on macOS) appends 1 line to `~/.logseq/move-log/<day>.log`: the key, what was edited or selected, each step of the move with its time, the rows around the block before and after. A press that leaves the block where it was is marked MISS and shows a warning; a move key that reached the app but ran no move is logged as UNHANDLED (`src/main/frontend/handler/move_log.cljs`, the `:appendMoveLog` handler in `src/electron/electron/handler.cljs`).
+
+Measured result on the same graph, key press to next frame, p50 / p90 / max over 83 keys, in the box on a virtual display: journals page 15.7 / 25.2 / 45 before, 4.3 / 6.2 / 14.1 after; a 204 KB page 44.7 / 50.7 / 66 before, 8.7 / 10.5 / 13.7 after; a 337 KB page 27.9 / 32 / 43 before, 4.5 / 11.1 / 29.9 after. Key handler time per key on the 204 KB page: 11 ms before, 0.7 ms after. Block-to-block arrow moves: 44 ms with 38 stalls in 40 moves before, 21 ms with none after.
+
+Rebasing onto a newer upstream, from a clone with `origin` = `logseq/logseq` and `fork` = this repository:
+
+```bash
+git fetch origin master
+git checkout fork/main
+git rebase origin/master
+```
+
+The four commits touch six files. Conflicts, when they come, will be in `state.cljs`, which upstream edits often; resolve by keeping the mechanism described above rather than the exact lines. After the rebase, run the checks below before building.
+
+Checks, from the repository root, one process at a time and never on a machine that is also running the desktop:
+
+```bash
+pnpm install
+clojure -M:clj-kondo --parallel --lint src --cache false
+pnpm cljs:test
+pnpm cljs:run-test
+```
+
+The unit runner groups namespaces into shared node processes; every group passes. One wall-clock assertion in `frontend.worker.search-test` (300 blocks indexed under 1000 ms) measures total process CPU and fails on a loaded machine; rerun it alone.
+
+Building a runnable desktop app. The nightly AppImage is used as the shell and only the renderer files are replaced, because the worker script shipped in the nightly is a standalone bundle and the main process refuses a worker from a different build revision.
+
+```bash
+pnpm release
+```
+
+That writes `static/js/main.js` and the other renderer files. Then, with the matching nightly AppImage extracted (`./Logseq-linux-x86_64-<version>.AppImage --appimage-extract` gives `squashfs-root/`) and its archive unpacked (`npx @electron/asar extract squashfs-root/resources/app.asar app`):
+
+```bash
+rsync -a --exclude "*.map" --exclude node_modules static/js/ app/js/
+cp static/index.html app/index.html
+rsync -a --exclude "*.map" static/css/ app/css/
+```
+
+Keep the nightly's own `app/electron.js`, `app/db-worker-node.js`, `app/js/db-worker-node.js`, `app/js/db-worker.js`, `app/js/db-worker-bundle.js`, and `app/logseq-cli.js`. Then repack and run:
+
+```bash
+npx @electron/asar pack app squashfs-root/resources/app.asar --unpack-dir "{node_modules/**/*.node,**/*.node}"
+./squashfs-root/AppRun --no-sandbox
+```
+
+If a later change touches the worker, build its standalone bundle with `pnpm db-worker-node:release:bundle` and use `dist/db-worker-node.js` for both worker paths in the archive.
+
+Measuring that typing is still fast, without touching a real window: launch the app with `--remote-debugging-port=9333`, then attach a recorder that reads the browser's Event Timing entries for `keydown` and `input` and its long tasks, and type into a page. The scripts used for the numbers above live in the `logseq-perf` workspace: `scripts/lsq-bench.mjs` (scripted typing over the DevTools protocol, reports p50 / p90 / max and long tasks), `scripts-host/install.mjs` and `read.mjs` (a persistent passive recorder for a person's own typing), `scripts-host/profile.mjs` and `analyze.cjs` (a CPU profile resolved to ClojureScript source through `js/main.js.map`). The acceptance line is p90 at or under 16 ms with zero long tasks during a typing burst on the largest pages.
+
+Known remaining costs, measured and left alone: opening a 204 KB page costs a 632 ms render task and a 318 ms first layout before typing begins; V8 major garbage collections of 36 to 74 ms happen in the seconds after a page opens and never during typing.
+
+The graph itself lives outside the app, under `~/logseq/graphs/<name>/db.sqlite`, with a worker daemon per open graph that outlives the app; a stale `db-worker.lock` there blocks a relaunch until the process it names is gone. The app's list of graphs is in `~/.config/Logseq/Local Storage/leveldb`. Markdown files are produced from the database by the app's Markdown Mirror setting (Settings, Features), into `~/logseq/graphs/<name>/mirror/markdown`.
