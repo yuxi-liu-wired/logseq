@@ -129,6 +129,7 @@ necessary db filtering"
             [:script {:defer true :src "static/js/katex.min.js"}]
             [:script {:defer true :src "static/js/pdf-loader.js"}]
             [:script {:defer true :src "static/js/html2canvas.min.js"}]
+            [:script {:defer true :src "static/js/tabler.ext.js"}]
             [:script {:defer true :src "static/js/code-editor.js"}]
             [:script {:defer true :src "static/js/custom.js"}]])))))
 
