@@ -1112,7 +1112,7 @@
        (when tag? "#")
        (when-not tag?
          [:span.text-gray-500.bracket page-ref/left-brackets])
-       (or label (:block/name page))
+       (if (string/blank? label) (:block/name page) label)
        (when-not tag?
          [:span.text-gray-500.bracket page-ref/right-brackets])]
 
