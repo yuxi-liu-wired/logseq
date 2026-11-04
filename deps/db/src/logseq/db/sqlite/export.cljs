@@ -1209,10 +1209,18 @@
                                          (into {}))))))
     m))
 
+(defn- track-existing-uuid!
+  "When an imported node already exists with a different uuid, records the
+   mapping so that references to the imported uuid, including a page with that
+   uuid, use the existing node"
+  [import-to-existing-page-uuids imported-uuid existing-uuid]
+  (when (and imported-uuid (not= imported-uuid existing-uuid))
+    (swap! import-to-existing-page-uuids assoc imported-uuid existing-uuid)))
+
 (defn- update-existing-properties
   "Updates existing properties by ident. Also check imported and existing properties have
    the same cardinality and type to avoid failure after import"
-  [db property-conflicts properties]
+  [db property-conflicts import-to-existing-page-uuids properties]
   (->> properties
        (map (fn [[k v]]
               (if-let [ent (d/entity db k)]
@@ -1223,6 +1231,7 @@
                            {:property-id k
                             :actual (select-keys v [:logseq.property/type :db/cardinality])
                             :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
+                  (track-existing-uuid! import-to-existing-page-uuids (:block/uuid v) (:block/uuid ent))
                   [k (assoc v :block/uuid (:block/uuid ent))])
                 [k v])))
        (into {})))
@@ -1245,11 +1254,13 @@
                  (->> classes
                       (map (fn [[k v]]
                              (if-let [ent (d/entity db k)]
-                               [k (assoc v :block/uuid (:block/uuid ent))]
+                               (do
+                                 (track-existing-uuid! import-to-existing-page-uuids (:block/uuid v) (:block/uuid ent))
+                                 [k (assoc v :block/uuid (:block/uuid ent))])
                                [k v])))
                       (into {})))
           (seq properties)
-          (assoc :properties (update-existing-properties db property-conflicts properties))
+          (assoc :properties (update-existing-properties db property-conflicts import-to-existing-page-uuids properties))
           ;; Graph exports don't use :build/page so this speeds up build
           (#{:graph :graph-human} export-type)
           (assoc :translate-property-values? false)
